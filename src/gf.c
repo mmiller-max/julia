@@ -1927,6 +1927,24 @@ JL_DLLEXPORT int32_t jl_invoke_api(jl_code_instance_t *codeinst)
     return -1;
 }
 
+static jl_method_instance_t *jl_get_compileable_spec(jl_methtable_t *mt, jl_tupletype_t *ti, jl_svec_t *env, jl_method_t *m)
+{
+    jl_tupletype_t *tt = NULL;
+    jl_svec_t *newparams = NULL;
+    JL_GC_PUSH2(&tt, &newparams)
+    intptr_t nspec = (mt == jl_type_type_mt || mt == jl_nonfunction_mt ? m->nargs + 1 : mt->max_args + 2);
+    jl_compilation_sig(ti, env, m, nspec, &newparams);
+    tt = (newparams ? jl_apply_tuple_type(newparams) : ti);
+    int is_compileable = ((jl_datatype_t*)ti)->isdispatchtuple ||
+        jl_isa_compileable_sig(tt, m);
+    if (is_compileable) {
+        JL_GC_POP();
+        return jl_specializations_get_linfo(m, (jl_value_t*)tt, env);
+    }
+    JL_GC_POP();
+    return NULL;
+}
+
 // compile-time method lookup
 jl_method_instance_t *jl_get_specialization1(jl_tupletype_t *types JL_PROPAGATES_ROOT, size_t world, size_t *min_valid, size_t *max_valid, int mt_cache)
 {
@@ -1949,7 +1967,7 @@ jl_method_instance_t *jl_get_specialization1(jl_tupletype_t *types JL_PROPAGATES
         return NULL;
     jl_tupletype_t *tt = NULL;
     jl_svec_t *newparams = NULL;
-    JL_GC_PUSH3(&matches, &tt, &newparams);
+    JL_GC_PUSH1(&matches);
     jl_method_match_t *match = (jl_method_match_t*)jl_array_ptr_ref(matches, 0);
     jl_method_t *m = match->method;
     jl_svec_t *env = match->sparams;
@@ -1969,14 +1987,7 @@ jl_method_instance_t *jl_get_specialization1(jl_tupletype_t *types JL_PROPAGATES
                 JL_UNLOCK(&mt->writelock);
             }
             else {
-                intptr_t nspec = (mt == jl_type_type_mt || mt == jl_nonfunction_mt ? m->nargs + 1 : mt->max_args + 2);
-                jl_compilation_sig(ti, env, m, nspec, &newparams);
-                tt = (newparams ? jl_apply_tuple_type(newparams) : ti);
-                int is_compileable = ((jl_datatype_t*)ti)->isdispatchtuple ||
-                    jl_isa_compileable_sig(tt, m);
-                if (is_compileable) {
-                    nf = jl_specializations_get_linfo(m, (jl_value_t*)tt, env);
-                }
+                nf = jl_get_compileable_spec(mt, ti, env, m);
             }
         }
     }
@@ -2057,12 +2068,18 @@ JL_DLLEXPORT int jl_compile_hint(jl_tupletype_t *types)
     return 1;
 }
 
-JL_DLLEXPORT jl_value_t *jl_get_spec_lambda(jl_tupletype_t *types, size_t world, size_t *min_valid, size_t *max_valid)
+JL_DLLEXPORT jl_value_t *jl_get_spec_lambda(jl_tupletype_t *ti, jl_svec_t *env, jl_method_t *m)
 {
-    jl_method_instance_t *mi = jl_get_specialization1(types, world, min_valid, max_valid, 0);
-    if (!mi)
-        return jl_nothing;
-    return (jl_value_t*)mi;
+    if (jl_is_datatype(ti)) {
+        jl_methtable_t *mt = jl_method_table_for((jl_value_t*)ti);
+        if ((jl_value_t*)mt != jl_nothing) {
+            jl_method_instance_t *mi = jl_get_compileable_spec(mt, ti, env, m);
+            if (!mi)
+                return jl_nothing;
+            return mi;
+        }
+    }
+    return jl_nothing;
 }
 
 // add type of `f` to front of argument tuple type

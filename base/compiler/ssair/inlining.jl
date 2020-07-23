@@ -578,11 +578,11 @@ function batch_inline!(todo::Vector{Any}, ir::IRCode, linetable::Vector{LineInfo
     return ir
 end
 
-function spec_lambda(@nospecialize(atype), sv::OptimizationState, @nospecialize(invoke_data))
+function spec_lambda(@nospecialize(atype), method::Method, methsp::SimpleVector, @nospecialize(metharg), sv::OptimizationState, @nospecialize(invoke_data))
     min_valid = RefValue{UInt}(typemin(UInt))
     max_valid = RefValue{UInt}(typemax(UInt))
     if invoke_data === nothing
-        mi = ccall(:jl_get_spec_lambda, Any, (Any, UInt, Ptr{UInt}, Ptr{UInt}), atype, sv.world, min_valid, max_valid)
+        mi = ccall(:jl_get_spec_lambda, Any, (Any, Any, Any), metharg, methsp, method)
     else
         invoke_data = invoke_data::InvokeData
         atype <: invoke_data.types0 || return nothing
@@ -720,7 +720,7 @@ function analyze_method!(idx::Int, sig::Signature, @nospecialize(metharg), meths
     # See if there exists a specialization for this method signature
     mi = specialize_method(method, metharg, methsp, true) # Union{Nothing, MethodInstance}
     if !isa(mi, MethodInstance)
-        return spec_lambda(atype_unlimited, sv, invoke_data)
+        return spec_lambda(atype_unlimited, method, methsp, metharg, sv, invoke_data)
     end
 
     isconst, src = find_inferred(mi, atypes, sv, stmttyp)
@@ -729,18 +729,18 @@ function analyze_method!(idx::Int, sig::Signature, @nospecialize(metharg), meths
             add_backedge!(mi, sv)
             return ConstantCase(src, method, Any[methsp...], metharg)
         else
-            return spec_lambda(atype_unlimited, sv, invoke_data)
+            return spec_lambda(atype_unlimited, method, methsp, metharg, sv, invoke_data)
         end
     end
     if src === nothing
-        return spec_lambda(atype_unlimited, sv, invoke_data)
+        return spec_lambda(atype_unlimited, method, methsp, metharg, sv, invoke_data)
     end
 
     src_inferred = ccall(:jl_ir_flag_inferred, Bool, (Any,), src)
     src_inlineable = ccall(:jl_ir_flag_inlineable, Bool, (Any,), src)
 
     if !(src_inferred && src_inlineable && sv.params.inlining)
-        return spec_lambda(atype_unlimited, sv, invoke_data)
+        return spec_lambda(atype_unlimited, method, methsp, metharg, sv, invoke_data)
     end
 
     # At this point we're committed to performing the inlining, add the backedge
