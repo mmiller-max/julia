@@ -86,19 +86,13 @@ struct Pass <: Result
     orig_expr
     data
     value
+    source::LineNumberNode
 end
 function Base.show(io::IO, t::Pass)
     printstyled(io, "Test Passed"; bold = true, color=:green)
-    if !(t.orig_expr === nothing)
-        print(io, "\n  Expression: ", t.orig_expr)
-    end
     if t.test_type === :test_throws
         # The correct type of exception was thrown
         print(io, "\n      Thrown: ", typeof(t.value))
-    elseif t.test_type === :test && t.data !== nothing
-        # The test was an expression, so display the term-by-term
-        # evaluated version as well
-        print(io, "\n   Evaluated: ", t.data)
     end
 end
 
@@ -505,7 +499,7 @@ function do_test(result::ExecutionResult, orig_expr)
         value = result.value
         testres = if isa(value, Bool)
             # a true value Passes
-            value ? Pass(:test, nothing, nothing, value) :
+            value ? Pass(:test, orig_expr, result.data, value, result.source) :
                     Fail(:test, orig_expr, result.data, value, result.source)
         else
             # If the result is non-Boolean, this counts as an Error
@@ -590,7 +584,7 @@ function do_test_throws(result::ExecutionResult, orig_expr, extype)
             end
         end
         if success
-            testres = Pass(:test_throws, nothing, nothing, exc)
+            testres = Pass(:test_throws, orig_expr, extype, exc, result.source)
         else
             testres = Fail(:test_throws_wrong, orig_expr, extype, exc, result.source)
         end
