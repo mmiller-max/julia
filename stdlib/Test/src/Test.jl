@@ -86,7 +86,7 @@ struct Pass <: Result
     orig_expr
     data
     value
-    source::LineNumberNode
+    source::Union{Nothing,LineNumberNode}
 end
 function Base.show(io::IO, t::Pass)
     printstyled(io, "Test Passed"; bold = true, color=:green)

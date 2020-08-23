@@ -323,7 +323,7 @@ cd(@__DIR__) do
         elseif isa(resp, Tuple{Int,Int})
             fake = Test.DefaultTestSet(testname)
             for i in 1:resp[1]
-                Test.record(fake, Test.Pass(:test, nothing, nothing, nothing))
+                Test.record(fake, Test.Pass(:test, nothing, nothing, nothing, LineNumberNode(@__LINE__, @__FILE__)))
             end
             for i in 1:resp[2]
                 Test.record(fake, Test.Broken(:test, nothing))
@@ -337,7 +337,7 @@ cd(@__DIR__) do
             println()
             fake = Test.DefaultTestSet(testname)
             for i in 1:resp.captured.ex.pass
-                Test.record(fake, Test.Pass(:test, nothing, nothing, nothing))
+                Test.record(fake, Test.Pass(:test, nothing, nothing, nothing, LineNumberNode(@__LINE__, @__FILE__)))
             end
             for i in 1:resp.captured.ex.broken
                 Test.record(fake, Test.Broken(:test, nothing))
